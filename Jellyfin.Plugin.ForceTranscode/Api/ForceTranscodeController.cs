@@ -33,9 +33,9 @@ public class ForceTranscodeController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public ActionResult<ForceTranscodeProfile> CreateProfile([FromBody] ForceTranscodeProfile profile)
     {
-        if (profile.UserId == Guid.Empty)
+        if (string.IsNullOrWhiteSpace(profile.DeviceId))
         {
-            return BadRequest("UserId is required.");
+            return BadRequest("DeviceId is required.");
         }
 
         profile.Id = Guid.NewGuid();

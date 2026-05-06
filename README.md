@@ -1,16 +1,18 @@
-# Force Transcode — Jellyfin Plugin
+# Force Transcoding — Jellyfin Plugin
 
-Force-transcodes specific video codecs to a target codec for configured user and device combinations, bypassing Jellyfin's normal direct-play and remux decisions.
+[![CI / CD](https://github.com/denisgabriel5/jellyfin-plugin-forcetranscoding/actions/workflows/ci.yaml/badge.svg)](https://github.com/denisgabriel5/jellyfin-plugin-forcetranscoding/actions/workflows/ci.yaml)
+
+Force-transcodes specific video codecs to a target codec for configured device and user combinations, bypassing Jellyfin's normal direct-play and remux decisions.
 
 ## Why?
 
 Jellyfin relies on the client's declared device profile to decide whether to direct-play, remux, or transcode. Some devices claim support for codecs like HEVC or AV1 in their profile but cannot actually decode those streams, resulting in playback failures or blank screens.
 
-This plugin lets you override that decision on a per-user, per-device basis without touching Jellyfin core or the device profile itself.
+This plugin lets you override that decision on a per-device, per-user basis without touching Jellyfin core or the device profile itself.
 
 ## How it works
 
-The plugin registers a global MVC action filter that intercepts every `POST /Items/{id}/PlaybackInfo` request. When the requesting user+device match a configured profile, the plugin patches the device profile in-place before Jellyfin's stream builder evaluates it:
+The plugin registers a global MVC action filter that intercepts every `POST /Items/{id}/PlaybackInfo` request. When the requesting device+user match a configured profile, the plugin patches the device profile in-place before Jellyfin's stream builder evaluates it:
 
 1. **Removes the source codecs** from all video `DirectPlayProfiles` — so the stream builder cannot choose direct-play for those codecs.
 2. **Sets the target codec** on all video `TranscodingProfiles` — so the only remaining option is to transcode to that codec.
@@ -25,13 +27,13 @@ The patch is applied per-request; no state is written to disk and the client's s
    ```
    https://raw.githubusercontent.com/denisgabriel5/jellyfin-plugin-forcetranscoding/master/manifest.json
    ```
-2. Go to **Plugins → Catalogue**, find **Force Transcode**, and install.
+2. Go to **Plugins → Catalogue**, find **Force Transcoding**, and install.
 3. Restart Jellyfin.
 
 ### Manual
 
 1. Download `Jellyfin.Plugin.ForceTranscode.dll` from the [Releases](../../releases) page.
-2. Create `<jellyfin-data>/plugins/ForceTranscode_0.1.0.0/`.
+2. Create `<jellyfin-data>/plugins/ForceTranscode_0.1.1.0/`.
 3. Copy the DLL and `meta.json` into that folder.
 4. Restart Jellyfin.
 
@@ -39,28 +41,28 @@ The patch is applied per-request; no state is written to disk and the client's s
 ```json
 {
   "id": "3c5f2d1a-8b4e-4f7c-a92d-1e6b0f3d9c2a",
-  "name": "Force Transcode",
-  "version": "0.1.0.0",
+  "name": "Force Transcoding",
+  "version": "0.1.1.0",
   "targetAbi": "10.12.0.0",
-  "overview": "Force-transcode video codecs per user and device",
-  "description": "Force-transcodes video codecs per user and device combination.",
-  "owner": "",
+  "overview": "Force-transcode video codecs per device and user",
+  "description": "Force-transcodes video codecs per device and user combination.",
+  "owner": "denisgabriel5",
   "category": "General"
 }
 ```
 
 ## Configuration
 
-Open **Dashboard → Plugins → Force Transcode → Settings**.
+Open **Dashboard → Plugins → Force Transcoding → Settings**.
 
 ### Creating a profile
 
 1. Click **New Profile**.
 2. Give it a name (e.g. "Living Room TV").
-3. Select the **Jellyfin user** the profile applies to.
+3. Select the **device** the profile applies to. Devices that have never connected to Jellyfin won't appear — play any video from the device first, then reload the page.
 4. Check the **source codecs** to intercept (e.g. HEVC / H.265).
 5. Choose the **target codec** to transcode to (default: H.264).
-6. Check the **devices** this profile applies to. Devices that have never connected to Jellyfin won't appear — play any video from the device first, then reload the page.
+6. Check the **users** this profile applies to, or click **Select All**.
 7. Click **Save**.
 
 ### Source codecs
@@ -107,4 +109,4 @@ dotnet test Jellyfin.Plugin.ForceTranscode.Tests/
 
 ## License
 
-[GPL-2.0](LICENSE)
+[GPL-3.0](LICENSE)

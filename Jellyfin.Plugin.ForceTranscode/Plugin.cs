@@ -10,9 +10,9 @@ using MediaBrowser.Model.Serialization;
 namespace Jellyfin.Plugin.ForceTranscode;
 
 /// <summary>
-/// Force H.264 Transcode plugin — intercepts playback info requests and removes
-/// HEVC/H.265 from the device profile for configured user+device pairs, causing
-/// Jellyfin to transcode HEVC content to H.264 rather than direct-play or remux it.
+/// Force Transcoding plugin — intercepts playback info requests and strips selected
+/// source codecs from the device profile for configured device+user pairs, causing
+/// Jellyfin to transcode to the configured target codec rather than direct-play or remux.
 /// </summary>
 public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
@@ -28,7 +28,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     }
 
     /// <inheritdoc />
-    public override string Name => "Force Transcode";
+    public override string Name => "Force Transcoding";
 
     /// <inheritdoc />
     public override Guid Id => Guid.Parse("3c5f2d1a-8b4e-4f7c-a92d-1e6b0f3d9c2a");

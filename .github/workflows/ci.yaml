@@ -1,22 +1,70 @@
-name: '🚀 Release'
+name: 'CI / CD'
 
-# Triggered by pushing a version tag: v0.1.0.0, v1.0.0.0, etc.
 on:
   push:
-    tags:
-      - 'v*.*.*.*'
+    branches: [ master, main ]
+    tags:     [ 'v*.*.*.*' ]
+    paths-ignore: [ '**/*.md' ]
+  pull_request:
+    branches: [ master, main ]
+    paths-ignore: [ '**/*.md' ]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v0.1.0.0)'
-        required: true
+        description: 'Version tag for manual release (e.g. v0.1.0.0). Leave blank to only build/test.'
+        required: false
 
 jobs:
-  release:
-    name: Build, publish, update manifest
+  build-and-test:
+    name: Build & Test
     runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore Jellyfin.Plugin.ForceTranscode.sln
+
+      - name: Build plugin (Release)
+        run: |
+          dotnet build Jellyfin.Plugin.ForceTranscode/Jellyfin.Plugin.ForceTranscode.csproj \
+            -c Release --no-restore
+
+      - name: Verify DLL was produced
+        run: |
+          test -f Jellyfin.Plugin.ForceTranscode/bin/Release/net*/Jellyfin.Plugin.ForceTranscode.dll
+          echo "DLL found"
+
+      - name: Build test project
+        run: |
+          dotnet build Jellyfin.Plugin.ForceTranscode.Tests/Jellyfin.Plugin.ForceTranscode.Tests.csproj \
+            --no-restore
+
+      - name: Run unit tests
+        run: |
+          dotnet test Jellyfin.Plugin.ForceTranscode.Tests/ \
+            --no-build --verbosity normal \
+            --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: '**/*.trx'
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: build-and-test
     permissions:
       contents: write
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')
 
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +76,7 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.version || github.ref_name }}"
           VERSION="${TAG#v}"
-          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Setup .NET
@@ -84,10 +132,8 @@ jobs:
               "repositoryUrl":  manifest_url,
           }
 
-          # Update repositoryUrl placeholders
           data[0]["versions"] = [v for v in data[0]["versions"] if v["version"] != version]
           data[0]["versions"].insert(0, entry)
-          # Keep at most 10 versions
           data[0]["versions"] = data[0]["versions"][:10]
 
           with open('manifest.json', 'w') as f:
@@ -106,7 +152,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
-          name: Force Transcode ${{ steps.ver.outputs.tag }}
+          name: Force Transcoding ${{ steps.ver.outputs.tag }}
           body: |
             ## Installation
 
@@ -116,5 +162,5 @@ jobs:
             https://raw.githubusercontent.com/${{ github.repository }}/master/manifest.json
             ```
 
-            Then install **Force Transcode** from the catalogue.
+            Then install **Force Transcoding** from the catalogue.
           files: ./publish/Jellyfin.Plugin.ForceTranscode.dll

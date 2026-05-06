@@ -79,8 +79,8 @@ public class ForceTranscodeActionFilter : IAsyncActionFilter
                 deviceId);
 
             var match = config.Profiles.FirstOrDefault(p =>
-                p.UserId == userId &&
-                p.DeviceIds.Contains(deviceId, StringComparer.OrdinalIgnoreCase));
+                p.DeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase) &&
+                p.UserIds.Contains(userId));
 
             if (match is null)
             {

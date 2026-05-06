@@ -4,8 +4,8 @@ using System.Collections.Generic;
 namespace Jellyfin.Plugin.ForceTranscode.Configuration;
 
 /// <summary>
-/// Maps a Jellyfin user and a set of devices to a forced-transcode rule.
-/// When the user plays video on any listed device, the selected source codecs
+/// Maps a device to a set of Jellyfin users for a forced-transcode rule.
+/// When any listed user plays video on that device, the selected source codecs
 /// are stripped from the device profile so the server transcodes them to the
 /// chosen target codec instead of direct-playing or remuxing.
 /// </summary>
@@ -17,11 +17,11 @@ public class ForceTranscodeProfile
     /// <summary>Gets or sets the display name for this profile.</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the Jellyfin user this profile applies to.</summary>
-    public Guid UserId { get; set; }
+    /// <summary>Gets or sets the device this profile applies to.</summary>
+    public string DeviceId { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the device IDs this profile applies to.</summary>
-    public List<string> DeviceIds { get; set; } = new List<string>();
+    /// <summary>Gets or sets the Jellyfin users this profile applies to.</summary>
+    public List<Guid> UserIds { get; set; } = new List<Guid>();
 
     /// <summary>
     /// Gets or sets the video codec to transcode to (e.g. "h264", "hevc", "av1", "vp9").

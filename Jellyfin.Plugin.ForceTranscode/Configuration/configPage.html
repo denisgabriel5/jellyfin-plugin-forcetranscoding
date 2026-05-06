@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Force Transcode</title>
+    <title>Force Transcoding</title>
 </head>
 <body>
 <div id="ForceTranscodePage"
@@ -13,15 +13,15 @@
         <div class="content-primary">
 
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5em;margin-bottom:0.25em">
-                <h2 style="margin:0">Force Transcode</h2>
+                <h2 style="margin:0">Force Transcoding</h2>
                 <button is="emby-button" id="ftAddBtn" type="button" class="raised emby-button">
                     &#43;&nbsp;New Profile
                 </button>
             </div>
             <p style="margin-top:0;color:var(--text-color-secondary,#aaa);font-size:.9em">
-                Each profile selects a user and devices. When that user plays video on a listed
-                device, the selected source codecs are force-transcoded to the target codec
-                instead of being direct-played or remuxed.
+                Each profile selects a device and the users it applies to. When a listed user
+                plays video on that device, the selected source codecs are force-transcoded to
+                the target codec instead of being direct-played or remuxed.
             </p>
 
             <div id="ftStatus" style="display:none;padding:0.6em 1em;border-radius:4px;margin-bottom:1em"></div>
@@ -64,13 +64,15 @@
                 <!-- Name -->
                 <div class="inputContainer">
                     <label class="inputLabel inputLabelUnfocused">Profile Name</label>
-                    <input class="ftName emby-input" is="emby-input" type="text" placeholder="e.g. Apple TV">
+                    <input class="ftName emby-input" is="emby-input" type="text" placeholder="e.g. Living Room TV">
                 </div>
 
-                <!-- User -->
+                <!-- Device dropdown -->
                 <div class="selectContainer" style="margin-top:.8em">
-                    <label class="selectLabel">Jellyfin User</label>
-                    <select class="ftUser emby-select-withcolor emby-select" is="emby-select"></select>
+                    <label class="selectLabel">Device</label>
+                    <select class="ftDevice emby-select-withcolor emby-select" is="emby-select">
+                        <option value="">— select a device —</option>
+                    </select>
                 </div>
 
                 <!-- Source codecs -->
@@ -103,14 +105,16 @@
                     </select>
                 </div>
 
-                <!-- Devices -->
+                <!-- Users -->
                 <div style="margin-top:1em">
-                    <div style="font-size:.9em;font-weight:600;margin-bottom:.5em">
-                        Apply to these devices:
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5em">
+                        <div style="font-size:.9em;font-weight:600">Apply to these users:</div>
+                        <button is="emby-button" class="ftSelectAll raised emby-button" type="button"
+                                style="font-size:.8em;padding:.2em .7em">Select All</button>
                     </div>
-                    <div class="ftDevices" style="display:grid;gap:.4em"></div>
-                    <p class="ftNoDevices" style="display:none;color:var(--text-color-secondary,#aaa);font-size:.85em;margin:.4em 0 0">
-                        No devices found. Connect a device to Jellyfin first, then reload this page.
+                    <div class="ftUsers" style="display:grid;gap:.4em"></div>
+                    <p class="ftNoUsers" style="display:none;color:var(--text-color-secondary,#aaa);font-size:.85em;margin:.4em 0 0">
+                        No users found.
                     </p>
                 </div>
 
@@ -187,24 +191,28 @@
             card.dataset.id = profile.Id || '';
 
             // Summary
-            var user = S.users.find(function (u) { return normGuid(u.Id) === normGuid(profile.UserId); });
+            var dev = S.devices.find(function (d) { return d.Id === profile.DeviceId; });
             card.querySelector('.ftSummaryName').textContent   = profile.Name || '(unnamed)';
-            card.querySelector('.ftSummaryDetail').textContent = user ? '— ' + user.Name : '';
+            card.querySelector('.ftSummaryDetail').textContent = dev
+                ? '— ' + (dev.CustomName || dev.Name || dev.Id)
+                : (profile.DeviceId ? '— ' + profile.DeviceId : '');
 
             // Name
             card.querySelector('.ftName').value = profile.Name || '';
 
-            // User dropdown
-            var sel = card.querySelector('.ftUser');
-            S.users.forEach(function (u) {
+            // Device dropdown
+            var devSel = card.querySelector('.ftDevice');
+            S.devices.forEach(function (d) {
                 var opt = document.createElement('option');
-                opt.value = u.Id;
-                opt.textContent = u.Name || u.Id;
-                if (normGuid(u.Id) === normGuid(profile.UserId)) opt.selected = true;
-                sel.appendChild(opt);
+                opt.value = d.Id;
+                opt.textContent = (d.CustomName || d.Name || d.Id) +
+                                  (d.AppName ? ' — ' + d.AppName : '') +
+                                  (d.LastUserName ? ' (' + d.LastUserName + ')' : '');
+                if (d.Id === profile.DeviceId) opt.selected = true;
+                devSel.appendChild(opt);
             });
 
-            // Source codecs checkboxes
+            // Source codecs
             var srcList = profile.SourceVideoCodecs || ['hevc'];
             SOURCE_CODECS.forEach(function (sc) {
                 var cb = card.querySelector('.' + sc.cls);
@@ -215,29 +223,34 @@
             var targetSel = card.querySelector('.ftTarget');
             if (targetSel) targetSel.value = profile.TargetVideoCodec || 'h264';
 
-            // Devices
-            var devContainer = card.querySelector('.ftDevices');
-            var noDevices    = card.querySelector('.ftNoDevices');
-            if (S.devices.length === 0) {
-                noDevices.style.display = '';
+            // Users checkboxes
+            var userContainer = card.querySelector('.ftUsers');
+            var noUsers       = card.querySelector('.ftNoUsers');
+            if (S.users.length === 0) {
+                noUsers.style.display = '';
             } else {
-                S.devices.forEach(function (d) {
+                var profileUserIds = (profile.UserIds || []).map(normGuid);
+                S.users.forEach(function (u) {
                     var label = document.createElement('label');
                     label.style.cssText = 'display:flex;align-items:center;gap:.5em;cursor:pointer';
                     var cb = document.createElement('input');
                     cb.type    = 'checkbox';
-                    cb.value   = d.Id;
-                    cb.checked = Array.isArray(profile.DeviceIds) &&
-                                 profile.DeviceIds.indexOf(d.Id) !== -1;
+                    cb.value   = u.Id;
+                    cb.checked = profileUserIds.indexOf(normGuid(u.Id)) !== -1;
                     var span = document.createElement('span');
-                    span.textContent = (d.CustomName || d.Name || d.Id) +
-                                       (d.AppName      ? ' — ' + d.AppName      : '') +
-                                       (d.LastUserName ? ' (' + d.LastUserName + ')' : '');
+                    span.textContent = u.Name || u.Id;
                     label.appendChild(cb);
                     label.appendChild(span);
-                    devContainer.appendChild(label);
+                    userContainer.appendChild(label);
                 });
             }
+
+            // Select All
+            card.querySelector('.ftSelectAll').addEventListener('click', function () {
+                var checkboxes = card.querySelectorAll('.ftUsers input[type=checkbox]');
+                var allChecked = Array.from(checkboxes).every(function (c) { return c.checked; });
+                checkboxes.forEach(function (c) { c.checked = !allChecked; });
+            });
 
             // Expand / collapse
             var summary = card.querySelector('.ftSummary');
@@ -264,17 +277,21 @@
                     })
                     .map(function (sc) { return sc.value; });
 
+                var userIds = Array.from(card.querySelectorAll('.ftUsers input:checked'))
+                    .map(function (c) { return c.value; });
+
                 var payload = {
                     Id:                profile.Id || undefined,
                     Name:              card.querySelector('.ftName').value.trim(),
-                    UserId:            card.querySelector('.ftUser').value,
-                    DeviceIds:         Array.from(card.querySelectorAll('.ftDevices input:checked')).map(function (c) { return c.value; }),
+                    DeviceId:          card.querySelector('.ftDevice').value,
+                    UserIds:           userIds,
                     TargetVideoCodec:  card.querySelector('.ftTarget').value || 'h264',
                     SourceVideoCodecs: srcCodecs.length > 0 ? srcCodecs : ['hevc']
                 };
 
-                if (!payload.Name)   { flash('Profile name is required.', true); return; }
-                if (!payload.UserId) { flash('Please select a user.', true);     return; }
+                if (!payload.Name)     { flash('Profile name is required.', true); return; }
+                if (!payload.DeviceId) { flash('Please select a device.', true);   return; }
+                if (payload.UserIds.length === 0) { flash('Please select at least one user.', true); return; }
 
                 var method = profile.Id ? 'PUT' : 'POST';
                 var path   = profile.Id ? API + '/' + profile.Id : API;
@@ -282,7 +299,7 @@
                 send(method, path, payload)
                     .then(function () { flash('Profile saved.'); init(); })
                     .catch(function (err) {
-                        console.error('[ForceTranscode] save', err);
+                        console.error('[ForceTranscoding] save', err);
                         flash('Failed to save profile.', true);
                     });
             });
@@ -308,8 +325,8 @@
         document.getElementById('ftAddBtn').addEventListener('click', function () {
             document.getElementById('ftEmpty').style.display = 'none';
             var card = buildCard({
-                Id: null, Name: '', UserId: '',
-                DeviceIds: [], TargetVideoCodec: 'h264', SourceVideoCodecs: ['hevc']
+                Id: null, Name: '', DeviceId: '',
+                UserIds: [], TargetVideoCodec: 'h264', SourceVideoCodecs: ['hevc']
             }, true);
             document.getElementById('ftList').appendChild(card);
             card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
