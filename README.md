@@ -1,6 +1,6 @@
 # Force Transcoding — Jellyfin Plugin
 
-[![CI / CD](https://github.com/denisgabriel5/jellyfin-plugin-forcetranscoding/actions/workflows/ci.yaml/badge.svg)](https://github.com/denisgabriel5/jellyfin-plugin-forcetranscoding/actions/workflows/ci.yaml)
+[![CI / CD](https://github.com/denisgabriel5/jellyfin-plugin-forcetranscoding/actions/workflows/ci.yaml/badge.svg?branch=master)](https://github.com/denisgabriel5/jellyfin-plugin-forcetranscoding/actions/workflows/ci.yaml)
 
 Force-transcodes specific video codecs to a target codec for configured device and user combinations, bypassing Jellyfin's normal direct-play and remux decisions.
 

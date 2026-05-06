@@ -3,7 +3,7 @@
     "name": "Force Transcoding",
     "description": "Force-transcodes video codecs per device and user combination.",
     "overview": "Force-transcode video codecs per device and user",
-    "owner": "",
+    "owner": "denisgabriel5",
     "category": "General",
     "guid": "3c5f2d1a-8b4e-4f7c-a92d-1e6b0f3d9c2a",
     "imageUrl": "",
