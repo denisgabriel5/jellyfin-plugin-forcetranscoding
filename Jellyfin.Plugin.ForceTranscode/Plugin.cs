@@ -1,16 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using Jellyfin.Plugin.Template.Configuration;
+using Jellyfin.Plugin.ForceTranscode.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 
-namespace Jellyfin.Plugin.Template;
+namespace Jellyfin.Plugin.ForceTranscode;
 
 /// <summary>
-/// The main plugin.
+/// Force H.264 Transcode plugin — intercepts playback info requests and removes
+/// HEVC/H.265 from the device profile for configured user+device pairs, causing
+/// Jellyfin to transcode HEVC content to H.264 rather than direct-play or remux it.
 /// </summary>
 public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
@@ -26,10 +28,14 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     }
 
     /// <inheritdoc />
-    public override string Name => "Template";
+    public override string Name => "Force Transcode";
 
     /// <inheritdoc />
-    public override Guid Id => Guid.Parse("eb5d7894-8eef-4b36-aa6f-5d124e828ce1");
+    public override Guid Id => Guid.Parse("3c5f2d1a-8b4e-4f7c-a92d-1e6b0f3d9c2a");
+
+    /// <inheritdoc />
+    public override string Description =>
+        "Force-transcodes selected video codecs to a target codec for specific user and device combinations, bypassing direct-play and remux paths.";
 
     /// <summary>
     /// Gets the current plugin instance.
@@ -44,7 +50,10 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
             new PluginPageInfo
             {
                 Name = Name,
-                EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", GetType().Namespace)
+                EmbeddedResourcePath = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0}.Configuration.configPage.html",
+                    GetType().Namespace)
             }
         ];
     }

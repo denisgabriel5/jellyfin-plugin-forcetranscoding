@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Force Transcode</title>
+</head>
+<body>
+<div id="ForceTranscodePage"
+     data-role="page"
+     class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-select,emby-checkbox">
+    <div data-role="content">
+        <div class="content-primary">
+
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5em;margin-bottom:0.25em">
+                <h2 style="margin:0">Force Transcode</h2>
+                <button is="emby-button" id="ftAddBtn" type="button" class="raised emby-button">
+                    &#43;&nbsp;New Profile
+                </button>
+            </div>
+            <p style="margin-top:0;color:var(--text-color-secondary,#aaa);font-size:.9em">
+                Each profile selects a user and devices. When that user plays video on a listed
+                device, the selected source codecs are force-transcoded to the target codec
+                instead of being direct-played or remuxed.
+            </p>
+
+            <div id="ftStatus" style="display:none;padding:0.6em 1em;border-radius:4px;margin-bottom:1em"></div>
+
+            <div id="ftList">
+                <p id="ftEmpty" style="color:var(--text-color-secondary,#aaa);display:none">
+                    No profiles yet. Click <strong>New Profile</strong> to create one.
+                </p>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+         Profile card template
+         ═══════════════════════════════════════════════ -->
+    <template id="ftTpl">
+        <div class="ftCard" style="
+            border:1px solid var(--divider-color,#444);
+            border-radius:6px;
+            padding:1.2em 1.4em;
+            margin-bottom:1.2em">
+
+            <!-- Collapsed summary -->
+            <div class="ftSummary" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5em;cursor:pointer">
+                <div>
+                    <strong class="ftSummaryName"></strong>
+                    <span class="ftSummaryDetail" style="margin-left:.6em;color:var(--text-color-secondary,#aaa);font-size:.85em"></span>
+                </div>
+                <div style="display:flex;gap:.5em">
+                    <button is="emby-button" class="ftEditBtn raised emby-button" type="button">Edit</button>
+                    <button is="emby-button" class="ftDelBtn raised emby-button" type="button"
+                            style="background:var(--color-red,#b00020)!important">Delete</button>
+                </div>
+            </div>
+
+            <!-- Expanded editor -->
+            <div class="ftEditor" style="display:none;margin-top:1em">
+
+                <!-- Name -->
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused">Profile Name</label>
+                    <input class="ftName emby-input" is="emby-input" type="text" placeholder="e.g. Apple TV">
+                </div>
+
+                <!-- User -->
+                <div class="selectContainer" style="margin-top:.8em">
+                    <label class="selectLabel">Jellyfin User</label>
+                    <select class="ftUser emby-select-withcolor emby-select" is="emby-select"></select>
+                </div>
+
+                <!-- Source codecs -->
+                <div style="margin-top:1em">
+                    <div style="font-size:.9em;font-weight:600;margin-bottom:.4em">Intercept these source codecs:</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:.6em 1.4em">
+                        <label style="display:flex;align-items:center;gap:.4em;cursor:pointer">
+                            <input type="checkbox" class="ftSrcHevc" value="hevc"> HEVC / H.265 (incl. Dolby Vision)
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.4em;cursor:pointer">
+                            <input type="checkbox" class="ftSrcAv1" value="av1"> AV1
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.4em;cursor:pointer">
+                            <input type="checkbox" class="ftSrcVp9" value="vp9"> VP9
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.4em;cursor:pointer">
+                            <input type="checkbox" class="ftSrcMpeg2" value="mpeg2video"> MPEG-2
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Target codec -->
+                <div class="selectContainer" style="margin-top:1em">
+                    <label class="selectLabel">Transcode to (target codec)</label>
+                    <select class="ftTarget emby-select-withcolor emby-select" is="emby-select">
+                        <option value="h264">H.264 — most compatible</option>
+                        <option value="hevc">H.265 / HEVC — better quality, needs capable device</option>
+                        <option value="av1">AV1 — best compression, needs modern hardware</option>
+                        <option value="vp9">VP9 — open codec, good compatibility</option>
+                    </select>
+                </div>
+
+                <!-- Devices -->
+                <div style="margin-top:1em">
+                    <div style="font-size:.9em;font-weight:600;margin-bottom:.5em">
+                        Apply to these devices:
+                    </div>
+                    <div class="ftDevices" style="display:grid;gap:.4em"></div>
+                    <p class="ftNoDevices" style="display:none;color:var(--text-color-secondary,#aaa);font-size:.85em;margin:.4em 0 0">
+                        No devices found. Connect a device to Jellyfin first, then reload this page.
+                    </p>
+                </div>
+
+                <!-- Actions -->
+                <div style="margin-top:1.2em;display:flex;gap:.6em;flex-wrap:wrap">
+                    <button is="emby-button" class="ftSaveBtn raised button-submit emby-button" type="button">Save</button>
+                    <button is="emby-button" class="ftCancelBtn raised emby-button" type="button">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script type="text/javascript">
+    (function () {
+        'use strict';
+
+        var API = 'ForceTranscode/Profiles';
+
+        var SOURCE_CODECS = [
+            { cls: 'ftSrcHevc',  value: 'hevc'       },
+            { cls: 'ftSrcAv1',   value: 'av1'        },
+            { cls: 'ftSrcVp9',   value: 'vp9'        },
+            { cls: 'ftSrcMpeg2', value: 'mpeg2video' }
+        ];
+
+        function normGuid(g) { return (g || '').replace(/-/g, '').toLowerCase(); }
+
+        function get(path) { return ApiClient.getJSON(ApiClient.getUrl(path)); }
+
+        function send(method, path, body) {
+            var opts = { url: ApiClient.getUrl(path), type: method };
+            if (body !== undefined) {
+                opts.data = JSON.stringify(body);
+                opts.contentType = 'application/json';
+            }
+            return ApiClient.ajax(opts);
+        }
+
+        function flash(msg, isError) {
+            var el = document.getElementById('ftStatus');
+            el.textContent = msg;
+            el.style.display = 'block';
+            el.style.background = isError ? 'rgba(176,0,32,.15)' : 'rgba(0,160,80,.15)';
+            el.style.color      = isError ? 'var(--color-red,#f44)' : '#4c4';
+            clearTimeout(el._t);
+            el._t = setTimeout(function () { el.style.display = 'none'; }, 4000);
+        }
+
+        var S = { users: [], devices: [], profiles: [] };
+
+        function init() {
+            Dashboard.showLoadingMsg();
+            var p1 = get('Users').then(function (u) { S.users   = u || []; })
+                        .catch(function () { flash('Could not load users.', true); });
+            var p2 = get('Devices').then(function (r) { S.devices = (r && r.Items) || []; })
+                        .catch(function () { flash('Could not load devices.', true); });
+            var p3 = get(API).then(function (p) { S.profiles = p || []; })
+                        .catch(function () { flash('Could not load profiles.', true); S.profiles = []; });
+            Promise.all([p1, p2, p3]).then(function () { render(); Dashboard.hideLoadingMsg(); });
+        }
+
+        function render() {
+            var list  = document.getElementById('ftList');
+            var empty = document.getElementById('ftEmpty');
+            Array.from(list.querySelectorAll('.ftCard')).forEach(function (c) { c.remove(); });
+            if (S.profiles.length === 0) { empty.style.display = ''; return; }
+            empty.style.display = 'none';
+            S.profiles.forEach(function (p) { list.appendChild(buildCard(p, false)); });
+        }
+
+        function buildCard(profile, startExpanded) {
+            var tmpl = document.getElementById('ftTpl');
+            var card = document.importNode(tmpl.content, true).querySelector('.ftCard');
+            card.dataset.id = profile.Id || '';
+
+            // Summary
+            var user = S.users.find(function (u) { return normGuid(u.Id) === normGuid(profile.UserId); });
+            card.querySelector('.ftSummaryName').textContent   = profile.Name || '(unnamed)';
+            card.querySelector('.ftSummaryDetail').textContent = user ? '— ' + user.Name : '';
+
+            // Name
+            card.querySelector('.ftName').value = profile.Name || '';
+
+            // User dropdown
+            var sel = card.querySelector('.ftUser');
+            S.users.forEach(function (u) {
+                var opt = document.createElement('option');
+                opt.value = u.Id;
+                opt.textContent = u.Name || u.Id;
+                if (normGuid(u.Id) === normGuid(profile.UserId)) opt.selected = true;
+                sel.appendChild(opt);
+            });
+
+            // Source codecs checkboxes
+            var srcList = profile.SourceVideoCodecs || ['hevc'];
+            SOURCE_CODECS.forEach(function (sc) {
+                var cb = card.querySelector('.' + sc.cls);
+                if (cb) cb.checked = srcList.indexOf(sc.value) !== -1;
+            });
+
+            // Target codec
+            var targetSel = card.querySelector('.ftTarget');
+            if (targetSel) targetSel.value = profile.TargetVideoCodec || 'h264';
+
+            // Devices
+            var devContainer = card.querySelector('.ftDevices');
+            var noDevices    = card.querySelector('.ftNoDevices');
+            if (S.devices.length === 0) {
+                noDevices.style.display = '';
+            } else {
+                S.devices.forEach(function (d) {
+                    var label = document.createElement('label');
+                    label.style.cssText = 'display:flex;align-items:center;gap:.5em;cursor:pointer';
+                    var cb = document.createElement('input');
+                    cb.type    = 'checkbox';
+                    cb.value   = d.Id;
+                    cb.checked = Array.isArray(profile.DeviceIds) &&
+                                 profile.DeviceIds.indexOf(d.Id) !== -1;
+                    var span = document.createElement('span');
+                    span.textContent = (d.CustomName || d.Name || d.Id) +
+                                       (d.AppName      ? ' — ' + d.AppName      : '') +
+                                       (d.LastUserName ? ' (' + d.LastUserName + ')' : '');
+                    label.appendChild(cb);
+                    label.appendChild(span);
+                    devContainer.appendChild(label);
+                });
+            }
+
+            // Expand / collapse
+            var summary = card.querySelector('.ftSummary');
+            var editor  = card.querySelector('.ftEditor');
+            function expand()   { editor.style.display = ''; summary.style.cursor = 'default'; }
+            function collapse() { editor.style.display = 'none'; summary.style.cursor = 'pointer'; }
+            if (startExpanded || !profile.Id) { expand(); } else { collapse(); }
+
+            summary.addEventListener('click', function (e) {
+                if (e.target.closest('button')) return;
+                editor.style.display === 'none' ? expand() : collapse();
+            });
+            card.querySelector('.ftEditBtn').addEventListener('click', expand);
+            card.querySelector('.ftCancelBtn').addEventListener('click', function () {
+                if (!profile.Id) { card.remove(); updateEmpty(); } else { collapse(); }
+            });
+
+            // Save
+            card.querySelector('.ftSaveBtn').addEventListener('click', function () {
+                var srcCodecs = SOURCE_CODECS
+                    .filter(function (sc) {
+                        var cb = card.querySelector('.' + sc.cls);
+                        return cb && cb.checked;
+                    })
+                    .map(function (sc) { return sc.value; });
+
+                var payload = {
+                    Id:                profile.Id || undefined,
+                    Name:              card.querySelector('.ftName').value.trim(),
+                    UserId:            card.querySelector('.ftUser').value,
+                    DeviceIds:         Array.from(card.querySelectorAll('.ftDevices input:checked')).map(function (c) { return c.value; }),
+                    TargetVideoCodec:  card.querySelector('.ftTarget').value || 'h264',
+                    SourceVideoCodecs: srcCodecs.length > 0 ? srcCodecs : ['hevc']
+                };
+
+                if (!payload.Name)   { flash('Profile name is required.', true); return; }
+                if (!payload.UserId) { flash('Please select a user.', true);     return; }
+
+                var method = profile.Id ? 'PUT' : 'POST';
+                var path   = profile.Id ? API + '/' + profile.Id : API;
+
+                send(method, path, payload)
+                    .then(function () { flash('Profile saved.'); init(); })
+                    .catch(function (err) {
+                        console.error('[ForceTranscode] save', err);
+                        flash('Failed to save profile.', true);
+                    });
+            });
+
+            // Delete
+            card.querySelector('.ftDelBtn').addEventListener('click', function () {
+                if (!profile.Id) { card.remove(); updateEmpty(); return; }
+                if (!confirm('Delete profile "' + (profile.Name || 'this profile') + '"?')) return;
+                send('DELETE', API + '/' + profile.Id)
+                    .then(function () { flash('Profile deleted.'); init(); })
+                    .catch(function () { flash('Failed to delete profile.', true); });
+            });
+
+            return card;
+        }
+
+        function updateEmpty() {
+            var hasCards = document.querySelector('#ftList .ftCard');
+            document.getElementById('ftEmpty').style.display = hasCards ? 'none' : '';
+        }
+
+        document.getElementById('ForceTranscodePage').addEventListener('pageshow', init);
+        document.getElementById('ftAddBtn').addEventListener('click', function () {
+            document.getElementById('ftEmpty').style.display = 'none';
+            var card = buildCard({
+                Id: null, Name: '', UserId: '',
+                DeviceIds: [], TargetVideoCodec: 'h264', SourceVideoCodecs: ['hevc']
+            }, true);
+            document.getElementById('ftList').appendChild(card);
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+
+    }());
+    </script>
+</div>
+</body>
+</html>

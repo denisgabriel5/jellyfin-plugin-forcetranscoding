@@ -1,18 +1,53 @@
-name: '🧪 Test Plugin'
+name: '🧪 Build & Test'
 
 on:
   push:
-    branches:
-      - master
-    paths-ignore:
-      - '**/*.md'
+    branches: [ master, main ]
+    paths-ignore: [ '**/*.md' ]
   pull_request:
-    branches:
-      - master
-    paths-ignore:
-      - '**/*.md'
+    branches: [ master, main ]
+    paths-ignore: [ '**/*.md' ]
   workflow_dispatch:
 
 jobs:
-  call:
-    uses: jellyfin/jellyfin-meta-plugins/.github/workflows/test.yaml@master
+  build-and-test:
+    name: Build plugin and run unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore Jellyfin.Plugin.ForceTranscode.sln
+
+      - name: Build plugin (Release)
+        run: |
+          dotnet build Jellyfin.Plugin.ForceTranscode/Jellyfin.Plugin.ForceTranscode.csproj \
+            -c Release --no-restore
+
+      - name: Verify DLL was produced
+        run: |
+          test -f Jellyfin.Plugin.ForceTranscode/bin/Release/net*/Jellyfin.Plugin.ForceTranscode.dll
+          echo "✓ DLL found"
+
+      - name: Build test project
+        run: |
+          dotnet build Jellyfin.Plugin.ForceTranscode.Tests/Jellyfin.Plugin.ForceTranscode.Tests.csproj \
+            --no-restore
+
+      - name: Run unit tests
+        run: |
+          dotnet test Jellyfin.Plugin.ForceTranscode.Tests/ \
+            --no-build --verbosity normal \
+            --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: '**/*.trx'

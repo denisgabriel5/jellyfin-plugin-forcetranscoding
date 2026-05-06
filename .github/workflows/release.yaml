@@ -1,0 +1,120 @@
+name: '🚀 Release'
+
+# Triggered by pushing a version tag: v0.1.0.0, v1.0.0.0, etc.
+on:
+  push:
+    tags:
+      - 'v*.*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.0.0)'
+        required: true
+
+jobs:
+  release:
+    name: Build, publish, update manifest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: ver
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build Release
+        run: |
+          dotnet publish Jellyfin.Plugin.ForceTranscode/Jellyfin.Plugin.ForceTranscode.csproj \
+            -c Release \
+            -p:Version="${{ steps.ver.outputs.version }}" \
+            -o ./publish
+
+      - name: Compute checksum
+        id: checksum
+        run: |
+          MD5=$(md5sum ./publish/Jellyfin.Plugin.ForceTranscode.dll | awk '{print $1}')
+          echo "md5=$MD5" >> "$GITHUB_OUTPUT"
+
+      - name: Update manifest.json
+        env:
+          VERSION:   ${{ steps.ver.outputs.version }}
+          TAG:       ${{ steps.ver.outputs.tag }}
+          CHECKSUM:  ${{ steps.checksum.outputs.md5 }}
+          REPO:      ${{ github.repository }}
+          TIMESTAMP: ${{ github.event.head_commit.timestamp || '2026-01-01T00:00:00Z' }}
+        run: |
+          python3 - <<'EOF'
+          import json, os
+
+          version   = os.environ['VERSION']
+          tag       = os.environ['TAG']
+          checksum  = os.environ['CHECKSUM']
+          repo      = os.environ['REPO']
+          timestamp = os.environ['TIMESTAMP']
+
+          manifest_url = f"https://raw.githubusercontent.com/{repo}/master/manifest.json"
+          source_url   = f"https://github.com/{repo}/releases/download/{tag}/Jellyfin.Plugin.ForceTranscode.dll"
+
+          with open('manifest.json') as f:
+              data = json.load(f)
+
+          entry = {
+              "version":        version,
+              "VersionNumber":  version,
+              "changelog":      f"Release {version}.",
+              "targetAbi":      "10.12.0.0",
+              "sourceUrl":      source_url,
+              "checksum":       checksum,
+              "timestamp":      timestamp,
+              "repositoryName": data[0]["name"],
+              "repositoryUrl":  manifest_url,
+          }
+
+          # Update repositoryUrl placeholders
+          data[0]["versions"] = [v for v in data[0]["versions"] if v["version"] != version]
+          data[0]["versions"].insert(0, entry)
+          # Keep at most 10 versions
+          data[0]["versions"] = data[0]["versions"][:10]
+
+          with open('manifest.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          EOF
+
+      - name: Commit updated manifest
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update manifest.json for ${{ steps.ver.outputs.tag }}"
+          file_pattern: manifest.json
+          branch: master
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Force Transcode ${{ steps.ver.outputs.tag }}
+          body: |
+            ## Installation
+
+            Add this URL as a custom repository in **Dashboard → Plugins → Repositories**:
+
+            ```
+            https://raw.githubusercontent.com/${{ github.repository }}/master/manifest.json
+            ```
+
+            Then install **Force Transcode** from the catalogue.
+          files: ./publish/Jellyfin.Plugin.ForceTranscode.dll
