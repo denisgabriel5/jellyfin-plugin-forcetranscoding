@@ -159,7 +159,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin master
-          git rebase --autostash origin/master
+          git reset --soft origin/master
           git add manifest.json
           git diff --cached --quiet || git commit -m "chore: update manifest.json for ${{ steps.ver.outputs.tag }}"
           git push origin HEAD:master
