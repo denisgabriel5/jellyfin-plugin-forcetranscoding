@@ -32,8 +32,8 @@ The patch is applied per-request; no state is written to disk and the client's s
 
 ### Manual
 
-1. Download `Jellyfin.Plugin.ForceTranscode.dll` from the [Releases](../../releases) page.
-2. Create `<jellyfin-data>/plugins/ForceTranscode_0.1.1.0/`.
+1. Download `Jellyfin.Plugin.ForceTranscode.zip` from the [Releases](../../releases) page.
+2. Extract the DLL and create `<jellyfin-data>/plugins/ForceTranscode_0.1.3.0/`.
 3. Copy the DLL and `meta.json` into that folder.
 4. Restart Jellyfin.
 
@@ -42,8 +42,8 @@ The patch is applied per-request; no state is written to disk and the client's s
 {
   "id": "3c5f2d1a-8b4e-4f7c-a92d-1e6b0f3d9c2a",
   "name": "Force Transcoding",
-  "version": "0.1.1.0",
-  "targetAbi": "10.12.0.0",
+  "version": "0.1.3.0",
+  "targetAbi": "10.11.8.0",
   "overview": "Force-transcode video codecs per device and user",
   "description": "Force-transcodes video codecs per device and user combination.",
   "owner": "denisgabriel5",
@@ -85,12 +85,13 @@ Open **Dashboard → Plugins → Force Transcoding → Settings**.
 
 ## Requirements
 
-- Jellyfin 10.12 or later
+- Jellyfin 10.11.8 or later
 - The user's Jellyfin policy must allow at minimum **"Allow media playback that requires conversion without re-encoding"** (remuxing). For transcoding to work, **"Allow video playback that requires transcoding"** must also be enabled.
 
 ## Limitations
 
 - Only intercepts `POST /Items/{id}/PlaybackInfo`. Clients using cached sessions or other playback endpoints may bypass the filter.
+- Each client app registers as a separate device in Jellyfin (e.g. "Jellyfin for Roku" and "Jellyfin Web" on the same TV appear as two devices). Create separate profiles if you need to target specific apps.
 - When a client sends no device profile in the request body, the plugin seeds the profile from the device's stored capabilities. If those are absent, a minimal HLS fallback is used which may restrict direct-play for all formats.
 
 ## Building from source

@@ -25,12 +25,12 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '9.0.x'
 
       - name: Checkout Jellyfin source
         run: |
           JELLYFIN_PATH="$(cd "$GITHUB_WORKSPACE/.." && pwd)/jellyfin"
-          git clone --depth 1 https://github.com/jellyfin/jellyfin.git "$JELLYFIN_PATH"
+          git clone --depth 1 --branch v10.11.8 https://github.com/jellyfin/jellyfin.git "$JELLYFIN_PATH"
 
       - name: Restore dependencies
         run: dotnet restore Jellyfin.Plugin.ForceTranscode.sln
@@ -87,12 +87,12 @@ jobs:
       - name: Checkout Jellyfin source
         run: |
           JELLYFIN_PATH="$(cd "$GITHUB_WORKSPACE/.." && pwd)/jellyfin"
-          git clone --depth 1 https://github.com/jellyfin/jellyfin.git "$JELLYFIN_PATH"
+          git clone --depth 1 --branch v10.11.8 https://github.com/jellyfin/jellyfin.git "$JELLYFIN_PATH"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '9.0.x'
 
       - name: Build Release
         run: |
