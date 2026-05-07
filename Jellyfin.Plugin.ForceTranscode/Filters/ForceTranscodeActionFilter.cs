@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Jellyfin.Api.Helpers;
 using Jellyfin.Api.Models.MediaInfoDtos;
 using Jellyfin.Plugin.ForceTranscode.Configuration;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Devices;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.MediaInfo;
@@ -19,17 +24,19 @@ namespace Jellyfin.Plugin.ForceTranscode.Filters;
 /// Global MVC action filter that intercepts both <c>GetPostedPlaybackInfo</c> (POST)
 /// and <c>GetPlaybackInfo</c> (GET) requests. For requests whose device+user match a
 /// configured profile the filter either patches the input device profile (POST) or
-/// strips direct-play/direct-stream from the response (GET) so the server transcodes
-/// the selected source codecs to the configured target codec.
+/// calls SetDeviceSpecificData on the response (GET) so the server generates a real
+/// TranscodingUrl pointing to the configured target codec.
 /// </summary>
 public class ForceTranscodeActionFilter : IAsyncActionFilter
 {
-    private const string TargetController  = "Jellyfin.Api.Controllers.MediaInfoController";
-    private const string PostAction        = "GetPostedPlaybackInfo";
-    private const string GetAction         = "GetPlaybackInfo";
+    private const string TargetController = "Jellyfin.Api.Controllers.MediaInfoController";
+    private const string PostAction       = "GetPostedPlaybackInfo";
+    private const string GetAction        = "GetPlaybackInfo";
 
     private readonly IAuthorizationContext _authContext;
     private readonly IDeviceManager _deviceManager;
+    private readonly MediaInfoHelper _mediaInfoHelper;
+    private readonly ILibraryManager _libraryManager;
     private readonly ILogger<ForceTranscodeActionFilter> _logger;
 
     /// <summary>
@@ -38,11 +45,15 @@ public class ForceTranscodeActionFilter : IAsyncActionFilter
     public ForceTranscodeActionFilter(
         IAuthorizationContext authContext,
         IDeviceManager deviceManager,
+        MediaInfoHelper mediaInfoHelper,
+        ILibraryManager libraryManager,
         ILogger<ForceTranscodeActionFilter> logger)
     {
-        _authContext = authContext;
-        _deviceManager = deviceManager;
-        _logger = logger;
+        _authContext     = authContext;
+        _deviceManager   = deviceManager;
+        _mediaInfoHelper = mediaInfoHelper;
+        _libraryManager  = libraryManager;
+        _logger          = logger;
     }
 
     /// <inheritdoc />
@@ -57,8 +68,7 @@ public class ForceTranscodeActionFilter : IAsyncActionFilter
         }
         else if (actionName == GetAction)
         {
-            var executed = await next().ConfigureAwait(false);
-            await TryApplyGetResultAsync(context, executed).ConfigureAwait(false);
+            await TryApplyGetAsync(context, next).ConfigureAwait(false);
         }
         else
         {
@@ -77,8 +87,8 @@ public class ForceTranscodeActionFilter : IAsyncActionFilter
         return null;
     }
 
-    private async Task<(bool matched, ForceTranscodeProfile? profile, string deviceId, Guid userId)> TryMatchProfileAsync(
-        ActionExecutingContext context)
+    private async Task<(bool matched, ForceTranscodeProfile? profile, string deviceId, Guid userId)>
+        TryMatchProfileAsync(ActionExecutingContext context)
     {
         var config = Plugin.Instance?.Configuration;
         if (config is null || config.Profiles.Count == 0)
@@ -166,12 +176,22 @@ public class ForceTranscodeActionFilter : IAsyncActionFilter
         }
     }
 
-    private async Task TryApplyGetResultAsync(ActionExecutingContext context, ActionExecutedContext executed)
+    private async Task TryApplyGetAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
+        // Resolve profile match before running the action so we log once.
+        var (matched, match, deviceId, userId) = await TryMatchProfileAsync(context).ConfigureAwait(false);
+
+        // Always run the original GET action — it is lightweight (no transcoding decisions).
+        var executed = await next().ConfigureAwait(false);
+
+        if (!matched || match is null)
+        {
+            return;
+        }
+
         try
         {
-            var (matched, match, _, _) = await TryMatchProfileAsync(context).ConfigureAwait(false);
-            if (!matched || match is null)
+            if (executed.Result is not ObjectResult { Value: PlaybackInfoResponse playbackInfo })
             {
                 return;
             }
@@ -180,27 +200,82 @@ public class ForceTranscodeActionFilter : IAsyncActionFilter
                 ? match.SourceVideoCodecs
                 : new List<string> { "hevc" };
 
-            if (executed.Result is not ObjectResult { Value: PlaybackInfoResponse playbackInfo })
+            var targetCodec = string.IsNullOrWhiteSpace(match.TargetVideoCodec)
+                ? "h264"
+                : match.TargetVideoCodec;
+
+            // Build a patched device profile: clone the registered caps (or start
+            // fresh if InfuseSync / similar hasn't registered one) and apply our
+            // codec overrides so StreamBuilder produces an H264 HLS TranscodingUrl.
+            var caps = _deviceManager.GetCapabilities(deviceId);
+            var patchedProfile = caps?.DeviceProfile is not null
+                ? JsonSerializer.Deserialize<DeviceProfile>(
+                    JsonSerializer.SerializeToUtf8Bytes(caps.DeviceProfile))!
+                : new DeviceProfile();
+
+            CodecHelper.ApplyForceTranscode(patchedProfile, targetCodec, sourceCodecs);
+
+            // Retrieve the item so SetDeviceSpecificData can determine audio vs video
+            // and check user transcoding permissions.
+            var itemId = context.ActionArguments.TryGetValue("itemId", out var raw) && raw is Guid g
+                ? g
+                : Guid.Empty;
+
+            var item = itemId != Guid.Empty
+                ? _libraryManager.GetItemById(itemId)
+                : null;
+
+            if (item is null)
             {
+                _logger.LogWarning(
+                    "[ForceTranscode] GET: could not resolve item {ItemId}; skipping SetDeviceSpecificData.",
+                    itemId);
                 return;
             }
 
-            var patched = 0;
+            var playSessionId = playbackInfo.PlaySessionId
+                ?? Guid.NewGuid().ToString("N", System.Globalization.CultureInfo.InvariantCulture);
+            var ipAddress     = context.HttpContext.GetNormalizedRemoteIP();
+            var patchedCount  = 0;
+
             foreach (var source in playbackInfo.MediaSources ?? [])
             {
                 var codec = source.VideoStream?.Codec;
-                if (codec != null && CodecHelper.IsCodecForbidden(codec, sourceCodecs))
+                if (codec is null || !CodecHelper.IsCodecForbidden(codec, sourceCodecs))
                 {
-                    source.SupportsDirectPlay   = false;
-                    source.SupportsDirectStream = false;
-                    patched++;
+                    continue;
                 }
+
+                _mediaInfoHelper.SetDeviceSpecificData(
+                    item,
+                    source,
+                    patchedProfile,
+                    context.HttpContext.User,
+                    maxBitrate: null,
+                    startTimeTicks: 0,
+                    mediaSourceId: source.Id ?? string.Empty,
+                    audioStreamIndex: null,
+                    subtitleStreamIndex: null,
+                    maxAudioChannels: null,
+                    playSessionId: playSessionId,
+                    userId: userId,
+                    enableDirectPlay: false,
+                    enableDirectStream: false,
+                    enableTranscoding: true,
+                    allowVideoStreamCopy: true,
+                    allowAudioStreamCopy: true,
+                    alwaysBurnInSubtitleWhenTranscoding: false,
+                    ipAddress: ipAddress);
+
+                patchedCount++;
             }
 
             _logger.LogInformation(
-                "[ForceTranscode] GET response patched — {Count} source(s) had DirectPlay/DirectStream disabled for profile '{Name}'",
-                patched,
-                match.Name);
+                "[ForceTranscode] GET: SetDeviceSpecificData applied to {Count} source(s) for profile '{Name}' — [{Sources}] → {Target}",
+                patchedCount,
+                match.Name,
+                string.Join(", ", sourceCodecs),
+                targetCodec);
         }
         catch (Exception ex)
         {
