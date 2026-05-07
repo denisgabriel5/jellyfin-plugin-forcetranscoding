@@ -37,6 +37,27 @@ public static class CodecHelper
         => Aliases.TryGetValue(codec, out var a) ? a : new[] { codec.ToLowerInvariant() };
 
     /// <summary>
+    /// Returns true if <paramref name="codec"/> (or any of its aliases) matches
+    /// any of the entries in <paramref name="sourceCodecs"/>.
+    /// </summary>
+    public static bool IsCodecForbidden(string codec, IEnumerable<string> sourceCodecs)
+    {
+        var normalized = codec.ToLowerInvariant();
+        foreach (var src in sourceCodecs)
+        {
+            foreach (var alias in ResolveAliases(src))
+            {
+                if (string.Equals(alias, normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Patches <paramref name="profile"/> so that:
     /// <list type="bullet">
     ///   <item>All <paramref name="sourceCodecs"/> (plus their aliases) are removed from

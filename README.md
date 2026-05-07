@@ -33,7 +33,7 @@ The patch is applied per-request; no state is written to disk and the client's s
 ### Manual
 
 1. Download `Jellyfin.Plugin.ForceTranscode.zip` from the [Releases](../../releases) page.
-2. Extract the DLL and create `<jellyfin-data>/plugins/ForceTranscode_0.1.3.0/`.
+2. Extract the DLL and create `<jellyfin-data>/plugins/ForceTranscode_0.1.4.0/`.
 3. Copy the DLL and `meta.json` into that folder.
 4. Restart Jellyfin.
 
@@ -42,7 +42,7 @@ The patch is applied per-request; no state is written to disk and the client's s
 {
   "id": "3c5f2d1a-8b4e-4f7c-a92d-1e6b0f3d9c2a",
   "name": "Force Transcoding",
-  "version": "0.1.3.0",
+  "version": "0.1.4.0",
   "targetAbi": "10.11.8.0",
   "overview": "Force-transcode video codecs per device and user",
   "description": "Force-transcodes video codecs per device and user combination.",
