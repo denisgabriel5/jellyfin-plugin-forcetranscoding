@@ -160,6 +160,7 @@ jobs:
           commit_message: "chore: update manifest.json for ${{ steps.ver.outputs.tag }}"
           file_pattern: manifest.json
           branch: master
+          skip_checkout: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
