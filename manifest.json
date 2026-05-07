@@ -9,6 +9,7 @@
     "imageUrl": "",
     "versions": [
       {
+<<<<<<< Updated upstream
         "version": "0.1.4.0",
         "VersionNumber": "0.1.4.0",
         "changelog": "Release 0.1.4.0.",
@@ -16,6 +17,15 @@
         "sourceUrl": "https://github.com/denisgabriel5/jellyfin-plugin-forcetranscoding/releases/download/v0.1.4.0/Jellyfin.Plugin.ForceTranscode.zip",
         "checksum": "49635057ce5a55f5ed4f6dc14172980c",
         "timestamp": "2026-05-07T15:57:07+03:00",
+=======
+        "version": "0.1.5.0",
+        "VersionNumber": "0.1.5.0",
+        "changelog": "Release 0.1.5.0.",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/denisgabriel5/jellyfin-plugin-forcetranscoding/releases/download/v0.1.5.0/Jellyfin.Plugin.ForceTranscode.zip",
+        "checksum": "bf26fb27e7c7b08942d78d236cc967e5",
+        "timestamp": "2026-05-07T17:08:16+03:00",
+>>>>>>> Stashed changes
         "repositoryName": "Force Transcoding",
         "repositoryUrl": "https://raw.githubusercontent.com/denisgabriel5/jellyfin-plugin-forcetranscoding/master/manifest.json"
       },
