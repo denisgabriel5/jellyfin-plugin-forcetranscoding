@@ -101,10 +101,13 @@ jobs:
             -p:Version="${{ steps.ver.outputs.version }}" \
             -o ./publish
 
+      - name: Package into zip
+        run: zip -j ./publish/Jellyfin.Plugin.ForceTranscode.zip ./publish/Jellyfin.Plugin.ForceTranscode.dll
+
       - name: Compute checksum
         id: checksum
         run: |
-          MD5=$(md5sum ./publish/Jellyfin.Plugin.ForceTranscode.dll | awk '{print $1}')
+          MD5=$(md5sum ./publish/Jellyfin.Plugin.ForceTranscode.zip | awk '{print $1}')
           echo "md5=$MD5" >> "$GITHUB_OUTPUT"
 
       - name: Update manifest.json
@@ -125,7 +128,7 @@ jobs:
           timestamp = os.environ['TIMESTAMP']
 
           manifest_url = f"https://raw.githubusercontent.com/{repo}/master/manifest.json"
-          source_url   = f"https://github.com/{repo}/releases/download/{tag}/Jellyfin.Plugin.ForceTranscode.dll"
+          source_url   = f"https://github.com/{repo}/releases/download/{tag}/Jellyfin.Plugin.ForceTranscode.zip"
 
           with open('manifest.json') as f:
               data = json.load(f)
@@ -134,7 +137,7 @@ jobs:
               "version":        version,
               "VersionNumber":  version,
               "changelog":      f"Release {version}.",
-              "targetAbi":      "10.12.0.0",
+              "targetAbi":      data[0]["versions"][0]["targetAbi"] if data[0]["versions"] else "10.11.8.0",
               "sourceUrl":      source_url,
               "checksum":       checksum,
               "timestamp":      timestamp,
@@ -173,4 +176,4 @@ jobs:
             ```
 
             Then install **Force Transcoding** from the catalogue.
-          files: ./publish/Jellyfin.Plugin.ForceTranscode.dll
+          files: ./publish/Jellyfin.Plugin.ForceTranscode.zip
